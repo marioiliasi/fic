@@ -5,6 +5,18 @@
 #include "opencv2/highgui/highgui.hpp"
 //#include <opencv2\cv.h>
 #include "opencv2/opencv.hpp"
+#include <arpa/inet.h>
+#include <errno.h>
+#include <stdio.h>
+#include <memory.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <string.h>
+
+#define HOST_IP "193.226.12.217"
+#define PORT_NUM 20236         /* daytime port number */
+#define BUF_SIZE 1024
+//
 
 using namespace std;
 using namespace cv;
@@ -16,6 +28,14 @@ int S_MIN = 0;
 int S_MAX = 256;
 int V_MIN = 0;
 int V_MAX = 256;
+
+double treshold = 20;
+int turnedRight =0;
+
+//coordonatele obiectelor
+Point roz(0,0);
+Point galben(0,0);
+
 //default capture width and height
 const int FRAME_WIDTH = 640;
 const int FRAME_HEIGHT = 480;
@@ -126,7 +146,7 @@ void morphOps(Mat &thresh) {
 
 
 }
-void trackFilteredObject(int &x, int &y, Mat threshold, Mat &cameraFeed) {
+void trackFilteredObject(int &x, int &y, Mat threshold, Mat &cameraFeed, Point &pt) {
 
 	Mat temp;
 	threshold.copyTo(temp);
@@ -165,7 +185,10 @@ void trackFilteredObject(int &x, int &y, Mat threshold, Mat &cameraFeed) {
 			if (objectFound == true) {
 				putText(cameraFeed, "Tracking Object", Point(0, 50), 2, 1, Scalar(0, 255, 0), 2);
 				//draw object location on screen
-				//cout << x << "," << y;
+				//cout<<"Object tracked at " << x << "," << y<<endl;
+        pt.x = x;
+        pt.y = y;
+        //aici trebuie salvat
 				drawObject(x, y, cameraFeed);
 
 			}
@@ -175,9 +198,118 @@ void trackFilteredObject(int &x, int &y, Mat threshold, Mat &cameraFeed) {
 		else putText(cameraFeed, "TOO MUCH NOISE! ADJUST FILTER", Point(0, 50), 1, 2, Scalar(0, 0, 255), 2);
 	}
 }
+
+int openSocket(){
+        struct sockaddr_in remote;
+        memset(&remote, 0, sizeof(remote));
+        remote.sin_family = AF_INET;
+        remote.sin_port = htons(PORT_NUM);
+        remote.sin_addr.s_addr = inet_addr(HOST_IP);
+     
+        if (remote.sin_addr.s_addr == INADDR_NONE)
+        {
+            perror("inet_addr");
+            return -1;
+        }
+     
+        /* Create a socket */
+        int sock = socket(AF_INET, SOCK_STREAM, 0);
+        if(sock < 0)
+        {
+            perror("socket");
+            return -1;
+        }
+     
+        /* Connect to remote host */
+        if(connect(sock, (struct sockaddr *) &remote, sizeof(remote)) < 0)
+        {
+            perror("connect");
+            close(sock);
+            return -1;
+        }
+        return sock;
+}
+
+void sendSocket(int sock, char *s){
+	 
+     
+        /* Read the data */
+        //char buffer[BUF_SIZE + 1];
+       // ssize_t tot = 0;
+	char c[2];
+  int i;
+  ssize_t cur;
+  for(i=0; i<strlen(s); i++){
+    if(s[i] == 'f' || s[i] == 's' || s[i] == 'r' || s[i] == 'l' ||s[i] == 'b'){
+  		sprintf(c, "%c", s[i]);
+  		cur = send(sock, c, sizeof(c), 0);
+  		if (cur < 0)
+  		{
+  			if (errno != EINTR)
+  			{
+  			    perror("send");
+  			    close(sock);
+  			    return;
+  			}
+  			else
+  			{
+  			    /* No data was write, interrupted */
+  			    continue;
+  			}
+  		}
+  		else if (!cur)
+  		{
+  			break;
+  		}
+     }
+     sleep(1);
+  }
+  sprintf(c, "%c", 's');
+  cur = send(sock, c, sizeof(c), 0);
+  if (cur < 0)
+  {
+  	if (errno != EINTR)
+  	{
+  	    perror("send");
+  	    close(sock);
+  	    return ;
+  	}
+  }
+  
+}  
+
+char* getNextMove(){
+	double xDiff = roz.x-galben.x;
+	if(xDiff<0)
+	{
+		xDiff = xDiff *(-1);
+	}
+	if(xDiff>treshold)
+	{//path1
+		return "f";
+	}
+	else if(turnedRight == 0)
+	{
+		//turn right
+		turnedRight =1;
+		return "r";
+	}
+	else
+	{
+		double yDiff = roz.y-galben.y;
+		if(yDiff<0)
+		{
+			yDiff = yDiff *(-1);
+		}
+		return "f";
+	}
+}
+
 int main(int argc, char* argv[])
 {
-
+  int sock = openSocket();
+  //sendSocket(sock, "fsbsrsls");
+	
 	//some boolean variables for different functionality within this
 	//program
 	bool trackObjects = true;
@@ -197,7 +329,7 @@ int main(int argc, char* argv[])
 	//video capture object to acquire webcam feed
 	VideoCapture capture;
 	//open capture object at location zero (default location for webcam)
-	capture.open(0);
+	capture.open("rtmp://172.16.254.99/live/nimic");
 	//set height and width of capture frame
 	capture.set(CV_CAP_PROP_FRAME_WIDTH, FRAME_WIDTH);
 	capture.set(CV_CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT);
@@ -216,7 +348,29 @@ int main(int argc, char* argv[])
 		cvtColor(cameraFeed, HSV, COLOR_BGR2HSV);
 		//filter HSV image between values and store filtered image to
 		//threshold matrix
-		inRange(HSV, Scalar(H_MIN, S_MIN, V_MIN), Scalar(H_MAX, S_MAX, V_MAX), threshold);
+		//inRange(HSV, Scalar(H_MIN, S_MIN, V_MIN), Scalar(H_MAX, S_MAX, V_MAX), threshold);
+    		inRange(HSV, Scalar(167, S_MIN, V_MIN), Scalar(H_MAX, S_MAX, V_MAX), threshold);//roz
+    		if (useMorphOps)
+			morphOps(threshold);
+		//pass in thresholded frame to our object tracking function
+		//this function will return the x and y coordinates of the
+		//filtered object
+		if (trackObjects)
+  		{
+			trackFilteredObject(x, y, threshold, cameraFeed,roz);
+     			 cout<<"point roz "<<roz.x<<" , "<<roz.y<<endl;
+      		}
+  
+  
+		//show frames
+		imshow(windowName2, threshold);
+		imshow(windowName, cameraFeed);
+		//imshow(windowName1, HSV);
+		setMouseCallback("Original Image", on_mouse, &p);
+		//delay 30ms so that screen can refresh.
+		//image will not appear without this waitKey() command
+		waitKey(30);
+    		inRange(HSV, Scalar(22, 82, V_MIN), Scalar(34, S_MAX, V_MAX), threshold);//galben
 		//perform morphological operations on thresholded image to eliminate noise
 		//and emphasize the filtered object(s)
 		if (useMorphOps)
@@ -225,18 +379,25 @@ int main(int argc, char* argv[])
 		//this function will return the x and y coordinates of the
 		//filtered object
 		if (trackObjects)
-			trackFilteredObject(x, y, threshold, cameraFeed);
+  		 {
+			trackFilteredObject(x, y, threshold, cameraFeed,galben);
+     			 cout<<"point galben "<<galben.x<<" , "<<galben.y<<endl;
+      		}
+
+		char *c = getNextMove();
+		sendSocket(sock, c);
+		printf("%c \n",c[0]);
 
 		//show frames
 		imshow(windowName2, threshold);
 		imshow(windowName, cameraFeed);
-		imshow(windowName1, HSV);
+		//imshow(windowName1, HSV);
 		setMouseCallback("Original Image", on_mouse, &p);
 		//delay 30ms so that screen can refresh.
 		//image will not appear without this waitKey() command
 		waitKey(30);
 	}
-
+	
+	
 	return 0;
 }
-
