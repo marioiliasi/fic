@@ -15,7 +15,7 @@
 #include <string.h>
 
 #define HOST_IP "193.226.12.217"
-#define PORT_NUM 20236         /* daytime port number */
+#define PORT_NUM 20232         /* daytime port number */
 #define BUF_SIZE 1024
 //
 
@@ -264,7 +264,7 @@ void sendSocket(int sock, char *s){
   			break;
   		}
      }
-     sleep(1);
+     //sleep(1);
   }
   sprintf(c, "%c", 's');
   cur = send(sock, c, sizeof(c), 0);
@@ -308,6 +308,14 @@ char* getNextMove(){
 	}*/
   if( abs((albastru.x - galben.x) * (roz.y - galben.y) - (roz.x - galben.x)*(albastru.y - galben.y)) < TRESHOLD )
   {
+    if(!((albastru.x>=roz.x && albastru.x<=galben.x)||(albastru.x<=roz.x &&albastru.x>=galben.x)))
+    {
+      return "r";    
+    }
+    if(!((albastru.y>=roz.y && albastru.y<=galben.y)||(albastru.y<=roz.y&&albastru.y>=galben.y)))
+    {
+      return "r";
+    }
     return "f";
   } else {
     return "r";
@@ -349,10 +357,6 @@ int main(int argc, char* argv[])
 
 	
 	while (1) {
- 
-   
-
-  
 		//store image to matrix
 		capture.read(cameraFeed);
 		//convert frame from BGR to HSV colorspace
@@ -360,8 +364,10 @@ int main(int argc, char* argv[])
 		//filter HSV image between values and store filtered image to
 		//threshold matrix
 		//inRange(HSV, Scalar(H_MIN, S_MIN, V_MIN), Scalar(H_MAX, S_MAX, V_MAX), threshold);
-   
- 		inRange(HSV, Scalar(167, S_MIN, V_MIN), Scalar(H_MAX, S_MAX, V_MAX), threshold);//roz
+		
+		//inRange(HSV, Scalar(139, 41, V_MIN), Scalar(182, 83, V_MAX), threshold);//roz
+		
+		inRange(HSV, Scalar(H_MIN, S_MIN, V_MIN), Scalar(H_MAX, S_MAX, V_MAX), threshold);
  		if (useMorphOps)
 			morphOps(threshold);
 		//pass in thresholded frame to our object tracking function
@@ -370,10 +376,10 @@ int main(int argc, char* argv[])
 		if (trackObjects)
 		{
 			trackFilteredObject(x, y, threshold, cameraFeed,roz);
-     	cout<<"point roz "<<roz.x<<" , "<<roz.y<<endl;
+     			cout<<"point roz "<<roz.x<<" , "<<roz.y<<endl;
  		}
   
-    sleep(1);
+    		//sleep(1);
 		//show frames
 		imshow(windowName2, threshold);
 		imshow(windowName, cameraFeed);
@@ -381,11 +387,13 @@ int main(int argc, char* argv[])
 		setMouseCallback("Original Image", on_mouse, &p);
 		//delay 30ms so that screen can refresh.
 		//image will not appear without this waitKey() command
-		waitKey(30);
+		//waitKey(30);
 		
-    //inRange(HSV, Scalar(22, 82, V_MIN), Scalar(34, S_MAX, V_MAX), threshold);//galben
-		inRange(HSV, Scalar(28, 23, 228), Scalar(150, 218, 256), threshold);
-    //perform morphological operations on thresholded image to eliminate noise
+		
+    		//inRange(HSV, Scalar(22, 82, V_MIN), Scalar(34, S_MAX, V_MAX), threshold);//galben
+		//inRange(HSV, Scalar(28, 23, 228), Scalar(150, 218, 256), threshold);
+		//inRange(HSV, Scalar(107, 96, V_MIN), Scalar(148, 134, V_MAX), threshold); //mov
+   		 //perform morphological operations on thresholded image to eliminate noise
 		//and emphasize the filtered object(s)
 		if (useMorphOps)
 			morphOps(threshold);
@@ -393,23 +401,23 @@ int main(int argc, char* argv[])
 		//this function will return the x and y coordinates of the
 		//filtered object
 		if (trackObjects)
-	  {
-			trackFilteredObject(x, y, threshold, cameraFeed,galben);
-     	cout<<"point galben "<<galben.x<<" , "<<galben.y<<endl;
-    }
+	 	{
+			trackFilteredObject(x, y, threshold, cameraFeed, galben);
+     			cout<<"point mov "<<galben.x<<" , "<<galben.y<<endl;
+    		}
 
-		sleep(1);
+		//sleep(1);
 
-		//show frames
+		//show
 		imshow(windowName2, threshold);
 		imshow(windowName, cameraFeed);
 		//imshow(windowName1, HSV);
 		setMouseCallback("Original Image", on_mouse, &p);
 		//delay 30ms so that screen can refresh.
 		//image will not appear without this waitKey() command
-		waitKey(30);
-   
-   inRange(HSV, Scalar(110, 165, 195), Scalar(120, 175, 205), threshold);//albastru
+		
+   		//inRange(HSV, Scalar(92, 135, V_MIN), Scalar(100, 164, V_MAX), threshold);
+   		//inRange(HSV, Scalar(110, 165, 195), Scalar(120, 175, 205), threshold);//albastru
 		//perform morphological operations on thresholded image to eliminate noise
 		//and emphasize the filtered object(s)
 		if (useMorphOps)
@@ -418,15 +426,16 @@ int main(int argc, char* argv[])
 		//this function will return the x and y coordinates of the
 		//filtered object
 		if (trackObjects)
-	  {
+  		{
 			trackFilteredObject(x, y, threshold, cameraFeed,albastru);
-     	cout<<"point albastru "<<albastru.x<<" , "<<albastru.y<<endl;
-    }
-   sleep(1);
-    //char *c = getNextMove();
-		//sendSocket(sock, c);
-		//printf("%c \n",c[0]);
-    
+     			cout<<"point albastru "<<albastru.x<<" , "<<albastru.y<<endl;
+   		}
+  
+    		char *c = getNextMove();
+		sendSocket(sock, c);
+		printf("%c \n",c[0]);
+		
+		waitKey(30);
 	}
 	
 	
